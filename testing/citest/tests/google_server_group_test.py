@@ -161,6 +161,7 @@ class GoogleServerGroupTestScenario(sk.SpinnakerTestScenario):
       'instanceMetadata': {
         'load-balancer-names': self.__lb_name
       },
+      'userData':'customUserData=testingUserData',
       'cloudProvider': 'gce',
       'image': self.bindings['TEST_GCE_IMAGE_NAME'],
       'instanceType': 'f1-micro',
@@ -175,7 +176,15 @@ class GoogleServerGroupTestScenario(sk.SpinnakerTestScenario):
     (builder.new_clause_builder(self.__mig_title + 'Created',
                                 retryable_for_secs=150)
      .list_resource(self.__mig_manager_name, **self.__mig_manager_kwargs)
-     .contains_path_value('name', self.__server_group_name))
+     .contains_match({'name': jp.EQUIVALENT(self.__server_group_name)}))
+
+    (builder.new_clause_builder('Instance Template Created',
+                                retryable_for_secs=150)
+     .list_resource('instanceTemplates')
+     .contains_path_pred('properties/metadata/items',
+                         jp.DICT_MATCHES({
+                             'key': jp.EQUIVALENT('customUserData'),
+                             'value': jp.EQUIVALENT('testingUserData')})))
 
     payload = self.agent.make_json_payload_from_kwargs(
         job=job,
@@ -265,6 +274,13 @@ class GoogleServerGroupTestScenario(sk.SpinnakerTestScenario):
                                 retryable_for_secs=90)
      .list_resource(self.__mig_manager_name, **self.__mig_manager_kwargs)
      .contains_path_value('baseInstanceName', self.__cloned_server_group_name))
+
+    (builder.new_clause_builder('Instance Template Created', retryable_for_secs=150)
+          .list_resource('instanceTemplates')
+          .contains_path_pred('properties/metadata/items',
+                              jp.DICT_MATCHES({
+                                  'key': jp.EQUIVALENT('customUserData'),
+                                  'value': jp.EQUIVALENT('testingUserData')})))
 
     payload = self.agent.make_json_payload_from_kwargs(
         job=job, description=self.__mig_title + ' Test - clone server group',
@@ -437,7 +453,7 @@ class GoogleServerGroupTest(st.AgentTestCase):
                        # TODO(ewiseblatt): 20160314
                        # There is a lock contention race condition
                        # in clouddriver that causes intermittent failure.
-                       max_retries=5)
+                      max_retries=5)
 
   def test_e_disable_server_group(self):
     self.run_test_case(self.scenario.disable_server_group())
